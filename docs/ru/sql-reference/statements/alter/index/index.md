@@ -1,7 +1,7 @@
 ---
 toc_hidden_folder: true
 toc_priority: 42
-toc_title: INDEX
+toc_title: "Манипуляции с индексами"
 ---
 
 # Манипуляции с индексами {#manipuliatsii-s-indeksami}
@@ -21,4 +21,3 @@ ALTER TABLE [db].name DROP INDEX name
 
 Запрос на изменение индексов реплицируется, сохраняя новые метаданные в ZooKeeper и применяя изменения на всех репликах.
 
-[Оригинальная статья](https://clickhouse.tech/docs/ru/query_language/alter/index/index/) <!--hide-->

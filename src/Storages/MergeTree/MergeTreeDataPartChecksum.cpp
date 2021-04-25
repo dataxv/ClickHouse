@@ -293,11 +293,8 @@ String MergeTreeDataPartChecksums::getTotalChecksumHex() const
 {
     SipHash hash_of_all_files;
 
-    for (const auto & elem : files)
+    for (const auto & [name, checksum] : files)
     {
-        const String & name = elem.first;
-        const auto & checksum = elem.second;
-
         updateHash(hash_of_all_files, name);
         hash_of_all_files.update(checksum.file_hash);
     }
@@ -376,11 +373,8 @@ void MinimalisticDataPartChecksums::computeTotalChecksums(const MergeTreeDataPar
     SipHash hash_of_uncompressed_files_state;
     SipHash uncompressed_hash_of_compressed_files_state;
 
-    for (const auto & elem : full_checksums_.files)
+    for (const auto & [name, checksum] : full_checksums_.files)
     {
-        const String & name = elem.first;
-        const auto & checksum = elem.second;
-
         updateHash(hash_of_all_files_state, name);
         hash_of_all_files_state.update(checksum.file_hash);
 
@@ -442,11 +436,9 @@ void MinimalisticDataPartChecksums::checkEqualImpl(const MinimalisticDataPartChe
 {
     if (num_compressed_files != rhs.num_compressed_files || num_uncompressed_files != rhs.num_uncompressed_files)
     {
-        std::stringstream error_msg;
-        error_msg << "Different number of files: " << rhs.num_compressed_files << " compressed (expected " << num_compressed_files << ")"
-            << " and " << rhs.num_uncompressed_files << " uncompressed ones (expected " << num_uncompressed_files << ")";
-
-        throw Exception(error_msg.str(), ErrorCodes::CHECKSUM_DOESNT_MATCH);
+        throw Exception(ErrorCodes::CHECKSUM_DOESNT_MATCH,
+                        "Different number of files: {} compressed (expected {}) and {} uncompressed ones (expected {})",
+                        rhs.num_compressed_files, num_compressed_files, rhs.num_uncompressed_files, num_uncompressed_files);
     }
 
     Strings errors;

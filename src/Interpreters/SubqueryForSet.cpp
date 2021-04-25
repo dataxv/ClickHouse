@@ -3,18 +3,24 @@
 #include <Interpreters/IJoin.h>
 #include <Interpreters/MergeJoin.h>
 #include <Interpreters/ExpressionActions.h>
-#include <DataStreams/LazyBlockInputStream.h>
+
 
 namespace DB
 {
+
+SubqueryForSet::SubqueryForSet() = default;
+SubqueryForSet::~SubqueryForSet() = default;
+SubqueryForSet::SubqueryForSet(SubqueryForSet &&) = default;
+SubqueryForSet & SubqueryForSet::operator= (SubqueryForSet &&) = default;
 
 void SubqueryForSet::makeSource(std::shared_ptr<InterpreterSelectWithUnionQuery> & interpreter,
                                 NamesWithAliases && joined_block_aliases_)
 {
     joined_block_aliases = std::move(joined_block_aliases_);
-    source = QueryPipeline::getPipe(interpreter->execute().pipeline);
+    source = std::make_unique<QueryPlan>();
+    interpreter->buildQueryPlan(*source);
 
-    sample_block = source.getHeader();
+    sample_block = interpreter->getSampleBlock();
     renameColumns(sample_block);
 }
 
@@ -33,10 +39,20 @@ void SubqueryForSet::renameColumns(Block & block)
     }
 }
 
-void SubqueryForSet::setJoinActions(ExpressionActionsPtr actions)
+void SubqueryForSet::addJoinActions(ExpressionActionsPtr actions)
 {
     actions->execute(sample_block);
-    joined_block_actions = actions;
+    if (joined_block_actions == nullptr)
+    {
+        joined_block_actions = actions;
+    }
+    else
+    {
+        auto new_dag = ActionsDAG::merge(
+            std::move(*joined_block_actions->getActionsDAG().clone()),
+            std::move(*actions->getActionsDAG().clone()));
+        joined_block_actions = std::make_shared<ExpressionActions>(new_dag, actions->getSettings());
+    }
 }
 
 bool SubqueryForSet::insertJoinedBlock(Block & block)

@@ -7,7 +7,7 @@ toc_title: Build on Linux
 
 Supported platforms:
 
--   x86\_64
+-   x86_64
 -   AArch64
 -   Power9 (experimental)
 
@@ -23,38 +23,24 @@ $ sudo apt-get install git cmake python ninja-build
 
 Or cmake3 instead of cmake on older systems.
 
-### Install GCC 9 {#install-gcc-9}
+### Install clang-11 (recommended) {#install-clang-11}
 
-There are several ways to do this.
+On Ubuntu/Debian you can use the automatic installation script (check [official webpage](https://apt.llvm.org/))
 
-#### Install from Repository {#install-from-repository}
-
-On Ubuntu 19.10 or newer:
-
-    $ sudo apt-get update
-    $ sudo apt-get install gcc-9 g++-9
-
-#### Install from a PPA Package {#install-from-a-ppa-package}
-
-On older Ubuntu:
-
-``` bash
-$ sudo apt-get install software-properties-common
-$ sudo apt-add-repository ppa:ubuntu-toolchain-r/test
-$ sudo apt-get update
-$ sudo apt-get install gcc-9 g++-9
+```bash
+sudo bash -c "$(wget -O - https://apt.llvm.org/llvm.sh)"
 ```
 
-#### Install from Sources {#install-from-sources}
+For other Linux distribution - check the availability of the [prebuild packages](https://releases.llvm.org/download.html) or build clang [from sources](https://clang.llvm.org/get_started.html).
 
-See [utils/ci/build-gcc-from-sources.sh](https://github.com/ClickHouse/ClickHouse/blob/master/utils/ci/build-gcc-from-sources.sh)
-
-### Use GCC 9 for Builds {#use-gcc-9-for-builds}
+#### Use clang-11 for Builds
 
 ``` bash
-$ export CC=gcc-9
-$ export CXX=g++-9
+$ export CC=clang-11
+$ export CXX=clang++-11
 ```
+
+Gcc can also be used though it is discouraged.
 
 ### Checkout ClickHouse Sources {#checkout-clickhouse-sources}
 
@@ -88,7 +74,7 @@ The build requires the following components:
 -   Git (is used only to checkout the sources, it’s not needed for the build)
 -   CMake 3.10 or newer
 -   Ninja (recommended) or Make
--   C++ compiler: gcc 9 or clang 8 or newer
+-   C++ compiler: gcc 10 or clang 8 or newer
 -   Linker: lld or gold (the classic GNU ld won’t work)
 -   Python (is only used inside LLVM build and it is optional)
 
@@ -116,7 +102,7 @@ ninja
 Example for Fedora Rawhide:
 ``` bash
 sudo yum update
-yum --nogpg install git cmake make gcc-c++ python2
+yum --nogpg install git cmake make gcc-c++ python3
 git clone --recursive https://github.com/ClickHouse/ClickHouse.git
 mkdir build && cd build
 cmake ../ClickHouse
@@ -126,11 +112,11 @@ make -j $(nproc)
 
 ## How to Build ClickHouse Debian Package {#how-to-build-clickhouse-debian-package}
 
-### Install Git and Pbuilder {#install-git-and-pbuilder}
+### Install Git {#install-git}
 
 ``` bash
 $ sudo apt-get update
-$ sudo apt-get install git python pbuilder debhelper lsb-release fakeroot sudo debian-archive-keyring debian-keyring
+$ sudo apt-get install git python debhelper lsb-release fakeroot sudo debian-archive-keyring debian-keyring
 ```
 
 ### Checkout ClickHouse Sources {#checkout-clickhouse-sources-1}
@@ -151,7 +137,7 @@ $ ./release
 Normally all tools of the ClickHouse bundle, such as `clickhouse-server`, `clickhouse-client` etc., are linked into a single static executable, `clickhouse`. This executable must be re-linked on every change, which might be slow. Two common ways to improve linking time are to use `lld` linker, and use the 'split' build configuration, which builds a separate binary for every tool, and further splits the code into serveral shared libraries. To enable these tweaks, pass the following flags to `cmake`:
 
 ```
--DCMAKE_C_FLAGS="-fuse-ld=lld" -DCMAKE_CXX_FLAGS="-fuse-ld=lld" -DUSE_STATIC_LIBRARIES=0 -DSPLIT_SHARED_LIBRARIES=1 -DCLICKHOUSE_SPLIT_BINARY=1
+-DCMAKE_C_FLAGS="--ld-path=lld" -DCMAKE_CXX_FLAGS="--ld-path=lld" -DUSE_STATIC_LIBRARIES=0 -DSPLIT_SHARED_LIBRARIES=1 -DCLICKHOUSE_SPLIT_BINARY=1
 ```
 
 ## You Don’t Have to Build ClickHouse {#you-dont-have-to-build-clickhouse}

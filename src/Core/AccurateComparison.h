@@ -4,6 +4,7 @@
 #include <limits>
 #include "Defines.h"
 #include "Types.h"
+#include <common/extended_types.h>
 #include <Common/NaNUtils.h>
 #include <Common/UInt128.h>
 
@@ -92,7 +93,7 @@ using bool_if_gt_int_vs_uint = std::enable_if_t<is_gt_int_vs_uint<TInt, TUInt>, 
 template <typename TInt, typename TUInt>
 inline bool_if_gt_int_vs_uint<TInt, TUInt> greaterOpTmpl(TInt a, TUInt b)
 {
-    return bigint_cast<TInt>(a) > bigint_cast<TInt>(b);
+    return static_cast<TInt>(a) > static_cast<TInt>(b);
 }
 
 template <typename TInt, typename TUInt>
@@ -100,19 +101,19 @@ inline bool_if_gt_int_vs_uint<TInt, TUInt> greaterOpTmpl(TUInt a, TInt b)
 {
     using CastA = std::conditional_t<is_big_int_v<TInt> && std::is_same_v<TUInt, DB::UInt128>, DB::UInt256, TInt>;
 
-    return bigint_cast<CastA>(a) > b;
+    return static_cast<CastA>(a) > b;
 }
 
 template <typename TInt, typename TUInt>
 inline bool_if_gt_int_vs_uint<TInt, TUInt> equalsOpTmpl(TInt a, TUInt b)
 {
-    return bigint_cast<TInt>(a) == bigint_cast<TInt>(b);
+    return static_cast<TInt>(a) == static_cast<TInt>(b);
 }
 
 template <typename TInt, typename TUInt>
 inline bool_if_gt_int_vs_uint<TInt, TUInt> equalsOpTmpl(TUInt a, TInt b)
 {
-    return bigint_cast<TInt>(a) == bigint_cast<TInt>(b);
+    return static_cast<TInt>(a) == static_cast<TInt>(b);
 }
 
 
@@ -176,7 +177,7 @@ inline bool_if_big_int_vs_float<TABigInt, TAFloat> equalsOpTmpl(TABigInt, TAFloa
     return false;
 }
 
-/* Final realiztions */
+/* Final implementations */
 
 
 template <typename A, typename B>
@@ -195,7 +196,7 @@ inline bool_if_safe_conversion<A, B> greaterOp(A a, B b)
     using CastB = std::conditional_t<is_big_int_v<A> && std::is_same_v<B, DB::UInt128>, A, CastB1>;
 
     if constexpr (is_big_int_v<A> || is_big_int_v<B>)
-        return bigint_cast<CastA>(a) > bigint_cast<CastB>(b);
+        return static_cast<CastA>(a) > static_cast<CastB>(b);
     else
         return a > b;
 }
@@ -273,12 +274,14 @@ inline bool greaterOp<DB::UInt64, DB::Float32>(DB::UInt64 u, DB::Float32 f)
 template <>
 inline bool greaterOp<DB::Float64, DB::UInt128>(DB::Float64 f, DB::UInt128 u)
 {
+    /// TODO: This is wrong.
     return u.low == 0 && greaterOp(f, u.high);
 }
 
 template <>
 inline bool greaterOp<DB::UInt128, DB::Float64>(DB::UInt128 u, DB::Float64 f)
 {
+    /// TODO: This is wrong.
     return u.low != 0 || greaterOp(u.high, f);
 }
 
@@ -305,60 +308,68 @@ inline bool_if_safe_conversion<A, B> equalsOp(A a, B b)
 {
     using LargestType = std::conditional_t<(sizeof(A) > sizeof(B)) || ((sizeof(A) == sizeof(B)) && !std::is_same_v<A, DB::UInt128>), A, B>;
 
-    return bigint_cast<LargestType>(a) == bigint_cast<LargestType>(b);
+    return static_cast<LargestType>(a) == static_cast<LargestType>(b);
 }
 
 template <>
-inline bool NO_SANITIZE_UNDEFINED equalsOp<DB::Float64, DB::UInt64>(DB::Float64 f, DB::UInt64 u)
+inline bool equalsOp<DB::Float64, DB::UInt64>(DB::Float64 f, DB::UInt64 u)
 {
-    return static_cast<DB::UInt64>(f) == u && f == static_cast<DB::Float64>(u);
+    /// Maximum exactly representable integer.
+    return u <= (1ULL << std::numeric_limits<DB::Float64>::digits)
+        && f == static_cast<DB::Float64>(u);
 }
 
 template <>
-inline bool NO_SANITIZE_UNDEFINED equalsOp<DB::UInt64, DB::Float64>(DB::UInt64 u, DB::Float64 f)
+inline bool equalsOp<DB::UInt64, DB::Float64>(DB::UInt64 u, DB::Float64 f)
 {
-    return u == static_cast<DB::UInt64>(f) && static_cast<DB::Float64>(u) == f;
+    return equalsOp(f, u);
 }
 
 template <>
-inline bool NO_SANITIZE_UNDEFINED equalsOp<DB::Float64, DB::Int64>(DB::Float64 f, DB::Int64 u)
+inline bool equalsOp<DB::Float64, DB::Int64>(DB::Float64 f, DB::Int64 u)
 {
-    return static_cast<DB::Int64>(f) == u && f == static_cast<DB::Float64>(u);
+    return u <= (1LL << std::numeric_limits<DB::Float64>::digits)
+        && u >= -(1LL << std::numeric_limits<DB::Float64>::digits)
+        && f == static_cast<DB::Float64>(u);
 }
 
 template <>
-inline bool NO_SANITIZE_UNDEFINED equalsOp<DB::Int64, DB::Float64>(DB::Int64 u, DB::Float64 f)
+inline bool equalsOp<DB::Int64, DB::Float64>(DB::Int64 u, DB::Float64 f)
 {
-    return u == static_cast<DB::Int64>(f) && static_cast<DB::Float64>(u) == f;
+    return equalsOp(f, u);
 }
 
 template <>
-inline bool NO_SANITIZE_UNDEFINED equalsOp<DB::Float32, DB::UInt64>(DB::Float32 f, DB::UInt64 u)
+inline bool equalsOp<DB::Float32, DB::UInt64>(DB::Float32 f, DB::UInt64 u)
 {
-    return static_cast<DB::UInt64>(f) == u && f == static_cast<DB::Float32>(u);
+    return u <= (1ULL << std::numeric_limits<DB::Float32>::digits)
+        && f == static_cast<DB::Float32>(u);
 }
 
 template <>
-inline bool NO_SANITIZE_UNDEFINED equalsOp<DB::UInt64, DB::Float32>(DB::UInt64 u, DB::Float32 f)
+inline bool equalsOp<DB::UInt64, DB::Float32>(DB::UInt64 u, DB::Float32 f)
 {
-    return u == static_cast<DB::UInt64>(f) && static_cast<DB::Float32>(u) == f;
+    return equalsOp(f, u);
 }
 
 template <>
-inline bool NO_SANITIZE_UNDEFINED equalsOp<DB::Float32, DB::Int64>(DB::Float32 f, DB::Int64 u)
+inline bool equalsOp<DB::Float32, DB::Int64>(DB::Float32 f, DB::Int64 u)
 {
-    return static_cast<DB::Int64>(f) == u && f == static_cast<DB::Float32>(u);
+    return u <= (1LL << std::numeric_limits<DB::Float32>::digits)
+        && u >= -(1LL << std::numeric_limits<DB::Float32>::digits)
+        && f == static_cast<DB::Float32>(u);
 }
 
 template <>
-inline bool NO_SANITIZE_UNDEFINED equalsOp<DB::Int64, DB::Float32>(DB::Int64 u, DB::Float32 f)
+inline bool equalsOp<DB::Int64, DB::Float32>(DB::Int64 u, DB::Float32 f)
 {
-    return u == static_cast<DB::Int64>(f) && static_cast<DB::Float32>(u) == f;
+    return equalsOp(f, u);
 }
 
 template <>
-inline bool NO_SANITIZE_UNDEFINED equalsOp<DB::UInt128, DB::Float64>(DB::UInt128 u, DB::Float64 f)
+inline bool equalsOp<DB::UInt128, DB::Float64>(DB::UInt128 u, DB::Float64 f)
 {
+    /// TODO: This is wrong.
     return u.low == 0 && equalsOp(static_cast<UInt64>(u.high), f);
 }
 
@@ -382,8 +393,8 @@ inline bool equalsOp<DB::Float32, DB::UInt128>(DB::Float32 f, DB::UInt128 u)
 
 inline bool NO_SANITIZE_UNDEFINED greaterOp(DB::Int128 i, DB::Float64 f)
 {
-    static constexpr Int128 min_int128 = Int128(0x8000000000000000ll) << 64;
-    static constexpr Int128 max_int128 = (Int128(0x7fffffffffffffffll) << 64) + 0xffffffffffffffffll;
+    static constexpr Int128 min_int128 = minInt128();
+    static constexpr Int128 max_int128 = maxInt128();
 
     if (-MAX_INT64_WITH_EXACT_FLOAT64_REPR <= i && i <= MAX_INT64_WITH_EXACT_FLOAT64_REPR)
         return static_cast<DB::Float64>(i) > f;
@@ -394,8 +405,8 @@ inline bool NO_SANITIZE_UNDEFINED greaterOp(DB::Int128 i, DB::Float64 f)
 
 inline bool NO_SANITIZE_UNDEFINED greaterOp(DB::Float64 f, DB::Int128 i)
 {
-    static constexpr Int128 min_int128 = Int128(0x8000000000000000ll) << 64;
-    static constexpr Int128 max_int128 = (Int128(0x7fffffffffffffffll) << 64) + 0xffffffffffffffffll;
+    static constexpr Int128 min_int128 = minInt128();
+    static constexpr Int128 max_int128 = maxInt128();
 
     if (-MAX_INT64_WITH_EXACT_FLOAT64_REPR <= i && i <= MAX_INT64_WITH_EXACT_FLOAT64_REPR)
         return f > static_cast<DB::Float64>(i);
@@ -428,7 +439,7 @@ inline bool_if_safe_conversion<A, B> notEqualsOp(A a, B b)
     using CastB = std::conditional_t<is_big_int_v<A> && std::is_same_v<B, DB::UInt128>, A, CastB1>;
 
     if constexpr (is_big_int_v<A> || is_big_int_v<B>)
-        return bigint_cast<CastA>(a) != bigint_cast<CastB>(b);
+        return static_cast<CastA>(a) != static_cast<CastB>(b);
     else
         return a != b;
 }
@@ -450,7 +461,7 @@ inline bool_if_safe_conversion<A, B> lessOp(A a, B b)
     using CastB = std::conditional_t<is_big_int_v<A> && std::is_same_v<B, DB::UInt128>, A, CastB1>;
 
     if constexpr (is_big_int_v<A> || is_big_int_v<B>)
-        return bigint_cast<CastA>(a) < bigint_cast<CastB>(b);
+        return static_cast<CastA>(a) < static_cast<CastB>(b);
     else
         return a < b;
 }
@@ -474,7 +485,7 @@ inline bool_if_safe_conversion<A, B> lessOrEqualsOp(A a, B b)
     using CastB = std::conditional_t<is_big_int_v<A> && std::is_same_v<B, DB::UInt128>, A, CastB1>;
 
     if constexpr (is_big_int_v<A> || is_big_int_v<B>)
-        return bigint_cast<CastA>(a) <= bigint_cast<CastB>(b);
+        return static_cast<CastA>(a) <= static_cast<CastB>(b);
     else
         return a <= b;
 }
@@ -498,7 +509,7 @@ inline bool_if_safe_conversion<A, B> greaterOrEqualsOp(A a, B b)
     using CastB = std::conditional_t<is_big_int_v<A> && std::is_same_v<B, DB::UInt128>, A, CastB1>;
 
     if constexpr (is_big_int_v<A> || is_big_int_v<B>)
-        return bigint_cast<CastA>(a) >= bigint_cast<CastB>(b);
+        return static_cast<CastA>(a) >= static_cast<CastB>(b);
     else
         return a >= b;
 }
@@ -514,11 +525,32 @@ inline bool NO_SANITIZE_UNDEFINED convertNumeric(From value, To & result)
         return true;
     }
 
-    /// Note that NaNs doesn't compare equal to anything, but they are still in range of any Float type.
-    if (isNaN(value) && std::is_floating_point_v<To>)
+    if constexpr (std::is_floating_point_v<From> && std::is_floating_point_v<To>)
     {
-        result = value;
-        return true;
+        /// Note that NaNs doesn't compare equal to anything, but they are still in range of any Float type.
+        if (isNaN(value))
+        {
+            result = value;
+            return true;
+        }
+
+        if (value == std::numeric_limits<From>::infinity())
+        {
+            result = std::numeric_limits<To>::infinity();
+            return true;
+        }
+
+        if (value == -std::numeric_limits<From>::infinity())
+        {
+            result = -std::numeric_limits<To>::infinity();
+            return true;
+        }
+    }
+
+    if (accurate::greaterOp(value, std::numeric_limits<To>::max())
+        || accurate::greaterOp(std::numeric_limits<To>::lowest(), value))
+    {
+        return false;
     }
 
     result = static_cast<To>(value);

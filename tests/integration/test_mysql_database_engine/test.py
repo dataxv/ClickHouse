@@ -44,7 +44,7 @@ class MySQLNodeInstance:
                     res = "\n".join(rows)
                 return res
 
-            if isinstance(execution_query, (str, bytes, unicode)):
+            if isinstance(execution_query, (str, bytes)):
                 return execute(execution_query)
             else:
                 return [execute(q) for q in execution_query]
@@ -124,6 +124,9 @@ def test_clickhouse_dml_for_mysql_database(started_cluster):
         clickhouse_node.query("INSERT INTO `test_database`.`test_table`(`i``d`) select number from numbers(10000)")
         assert clickhouse_node.query("SELECT count() FROM `test_database`.`test_table`").rstrip() == '10000'
 
+        clickhouse_node.query("DROP DATABASE test_database")
+        assert 'test_database' not in clickhouse_node.query('SHOW DATABASES')
+
         mysql_node.query("DROP DATABASE test_database")
 
 
@@ -143,10 +146,14 @@ def test_clickhouse_join_for_mysql_database(started_cluster):
             "CREATE TABLE default.t1_remote_mysql AS mysql('mysql1:3306','test','t1_mysql_local','root','clickhouse')")
         clickhouse_node.query(
             "CREATE TABLE default.t2_remote_mysql AS mysql('mysql1:3306','test','t2_mysql_local','root','clickhouse')")
+        clickhouse_node.query("INSERT INTO `default`.`t1_remote_mysql` VALUES ('EN','A',''),('RU','B','AAA')")
+        clickhouse_node.query("INSERT INTO `default`.`t2_remote_mysql` VALUES ('A','AAA'),('Z','')")
+        
         assert clickhouse_node.query("SELECT s.pays "
                                      "FROM default.t1_remote_mysql AS s "
                                      "LEFT JOIN default.t1_remote_mysql AS s_ref "
-                                     "ON (s_ref.opco = s.opco AND s_ref.service = s.service)") == ''
+                                     "ON (s_ref.opco = s.opco AND s_ref.service = s.service) "
+                                     "WHERE s_ref.opco != '' AND s.opco != '' ").rstrip() == 'RU'
         mysql_node.query("DROP DATABASE test")
 
 
@@ -160,13 +167,89 @@ def test_bad_arguments_for_mysql_database_engine(started_cluster):
         mysql_node.query("DROP DATABASE test_bad_arguments")
 
 
-decimal_values = [0.123, 0.4, 5.67, 8.91011, 123456789.123, -0.123, -0.4, -5.67, -8.91011, -123456789.123]
-timestamp_values = ['2015-05-18 07:40:01.123', '2019-09-16 19:20:11.123']
-timestamp_values_no_subsecond = ['2015-05-18 07:40:01', '2019-09-16 19:20:11']
+def test_data_types_support_level_for_mysql_database_engine(started_cluster):
+    with contextlib.closing(MySQLNodeInstance('root', 'clickhouse', '127.0.0.1', port=3308)) as mysql_node:
+        mysql_node.query("CREATE DATABASE IF NOT EXISTS test DEFAULT CHARACTER SET 'utf8'")
+        clickhouse_node.query("CREATE DATABASE test_database ENGINE = MySQL('mysql1:3306', test, 'root', 'clickhouse')",
+            settings={"mysql_datatypes_support_level": "decimal,datetime64"})
+
+        assert "SETTINGS mysql_datatypes_support_level = \\'decimal,datetime64\\'" in clickhouse_node.query("SHOW CREATE DATABASE test_database FORMAT TSV")
+        clickhouse_node.query("DETACH DATABASE test_database")
+
+        # without context settings
+        clickhouse_node.query("ATTACH DATABASE test_database")
+        assert "SETTINGS mysql_datatypes_support_level = \\'decimal,datetime64\\'" in clickhouse_node.query("SHOW CREATE DATABASE test_database FORMAT TSV")
+
+        clickhouse_node.query(
+            "CREATE DATABASE test_database_1 ENGINE = MySQL('mysql1:3306', test, 'root', 'clickhouse') SETTINGS mysql_datatypes_support_level = 'decimal,datetime64'",
+            settings={"mysql_datatypes_support_level": "decimal"})
+
+        assert "SETTINGS mysql_datatypes_support_level = \\'decimal,datetime64\\'" in clickhouse_node.query("SHOW CREATE DATABASE test_database_1 FORMAT TSV")
+        clickhouse_node.query("DETACH DATABASE test_database_1")
+
+        # without context settings
+        clickhouse_node.query("ATTACH DATABASE test_database_1")
+        assert "SETTINGS mysql_datatypes_support_level = \\'decimal,datetime64\\'" in clickhouse_node.query("SHOW CREATE DATABASE test_database_1 FORMAT TSV")
+
+        clickhouse_node.query("DROP DATABASE test_database")
+        clickhouse_node.query("DROP DATABASE test_database_1")
+        assert 'test_database' not in clickhouse_node.query('SHOW DATABASES')
+        mysql_node.query("DROP DATABASE test")
+
+
+# test tool cannot support null by now. TSV format returns \N for null, so cannot compare using == directly
+# float_values = ['NULL']
+# float_values = [0] mysql returns 0 while clickhouse returns 0.0, so cannot compare using == directly
+int32_values = [0, 1, -1, 2147483647, -2147483648]
+uint32_values = [0, 1] # [FIXME] seems client have issue with value 4294967295, it returns -1 for it
+mint_values = [0, 1, -1, 8388607, -8388608]
+umint_values = [0, 1, 16777215]
+int16_values = [0, 1, -1, 32767, -32768]
+uint16_values = [0, 1, 65535]
+int8_values = [0, 1, -1, 127, -128]
+uint8_values = [0, 1, 255]
+# string_values = ["'ClickHouse'", 'NULL']
+string_values = ["'ClickHouse'"] 
+
+
+decimal_values = [0, 0.123, 0.4, 5.67, 8.91011, 123456789.123, -0.123, -0.4, -5.67, -8.91011, -123456789.123]
+timestamp_values = ["'2015-05-18 07:40:01.123'", "'2019-09-16 19:20:11.123'"]
+timestamp_values_no_subsecond = ["'2015-05-18 07:40:01'", "'2019-09-16 19:20:11'"]
 
 
 @pytest.mark.parametrize("case_name, mysql_type, expected_ch_type, mysql_values, setting_mysql_datatypes_support_level",
                          [
+                             # test common type mapping
+                             # ("common_types", "FLOAT", "Nullable(Float32)", float_values, ""),
+                             # ("common_types", "FLOAT UNSIGNED", "Nullable(Float32)", float_values, ""),
+
+                             ("common_types", "INT", "Nullable(Int32)", int32_values, ""),
+                             ("common_types", "INT NOT NULL", "Int32", int32_values, ""),
+                             ("common_types", "INT UNSIGNED NOT NULL", "UInt32", uint32_values, ""),
+                             ("common_types", "INT UNSIGNED", "Nullable(UInt32)", uint32_values, ""),
+                             ("common_types", "INT UNSIGNED DEFAULT NULL", "Nullable(UInt32)", uint32_values, ""),
+                             ("common_types", "INT UNSIGNED DEFAULT '1'", "Nullable(UInt32)", uint32_values, ""),
+                             ("common_types", "INT(10)", "Nullable(Int32)", int32_values, ""),
+                             ("common_types", "INT(10) NOT NULL", "Int32", int32_values, ""),
+                             ("common_types", "INT(10) UNSIGNED NOT NULL", "UInt32", uint32_values, ""),
+                             ("common_types", "INT(10) UNSIGNED", "Nullable(UInt32)", uint32_values, ""),
+                             ("common_types", "INT(10) UNSIGNED DEFAULT NULL", "Nullable(UInt32)", uint32_values, ""),
+                             ("common_types", "INT(10) UNSIGNED DEFAULT '1'", "Nullable(UInt32)", uint32_values, ""),
+                             ("common_types", "INTEGER", "Nullable(Int32)", int32_values, ""),
+                             ("common_types", "INTEGER UNSIGNED", "Nullable(UInt32)", uint32_values, ""),
+
+                             ("common_types", "MEDIUMINT", "Nullable(Int32)", mint_values, ""),
+                             ("common_types", "MEDIUMINT UNSIGNED", "Nullable(UInt32)", umint_values, ""),
+
+                             ("common_types", "SMALLINT", "Nullable(Int16)", int16_values, ""),
+                             ("common_types", "SMALLINT UNSIGNED", "Nullable(UInt16)", uint16_values, ""),
+
+                             ("common_types", "TINYINT", "Nullable(Int8)", int8_values, ""),
+                             ("common_types", "TINYINT UNSIGNED", "Nullable(UInt8)", uint8_values, ""),
+
+                             ("common_types", "VARCHAR(10)", "Nullable(String)", string_values, ""),
+
+
                              ("decimal_default", "decimal NOT NULL", "Decimal(10, 0)", decimal_values,
                               "decimal,datetime64"),
                              ("decimal_default_nullable", "decimal", "Nullable(Decimal(10, 0))", decimal_values,
@@ -187,9 +270,8 @@ timestamp_values_no_subsecond = ['2015-05-18 07:40:01', '2019-09-16 19:20:11']
                               "decimal,datetime64"),
 
                              # right now precision bigger than 39 is not supported by ClickHouse's Decimal, hence fall back to String
-                             (
-                                     "decimal_40_6", "decimal(40, 6) NOT NULL", "String", decimal_values,
-                                     "decimal,datetime64"),
+                             ("decimal_40_6", "decimal(40, 6) NOT NULL", "String", decimal_values, 
+                              "decimal,datetime64"),
                              ("decimal_18_6", "decimal(18, 6) NOT NULL", "String", decimal_values, "datetime64"),
                              ("decimal_18_6", "decimal(18, 6) NOT NULL", "String", decimal_values, ""),
                              ("datetime_6", "DATETIME(6) NOT NULL", "DateTime", timestamp_values_no_subsecond,
@@ -207,7 +289,7 @@ def test_mysql_types(started_cluster, case_name, mysql_type, expected_ch_type, m
         mysql_db='decimal_support',
         table_name=case_name,
         mysql_type=mysql_type,
-        mysql_values=', '.join('({})'.format(repr(x)) for x in mysql_values),
+        mysql_values=', '.join('({})'.format(x) for x in mysql_values),
         ch_mysql_db='mysql_db',
         ch_mysql_table='mysql_table_engine_' + case_name,
         expected_ch_type=expected_ch_type,
@@ -223,7 +305,7 @@ def test_mysql_types(started_cluster, case_name, mysql_type, expected_ch_type, m
             res = node.query(query, **kwargs)
             return res if isinstance(res, int) else res.rstrip('\n\r')
 
-        if isinstance(query, (str, bytes, unicode)):
+        if isinstance(query, (str, bytes)):
             return do_execute(query)
         else:
             return [do_execute(q) for q in query]

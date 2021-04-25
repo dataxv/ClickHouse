@@ -1,3 +1,4 @@
+#pragma once
 #include <Databases/DatabaseOnDisk.h>
 #include <boost/smart_ptr/atomic_shared_ptr.hpp>
 #include <ext/scope_guard.h>
@@ -16,11 +17,11 @@ public:
 
     void detachDictionary(const String & dictionary_name) override;
 
-    void createDictionary(const Context & context,
+    void createDictionary(ContextPtr context,
                           const String & dictionary_name,
                           const ASTPtr & query) override;
 
-    void removeDictionary(const Context & context, const String & dictionary_name) override;
+    void removeDictionary(ContextPtr context, const String & dictionary_name) override;
 
     bool isDictionaryExist(const String & dictionary_name) const override;
 
@@ -37,7 +38,7 @@ public:
     ~DatabaseWithDictionaries() override;
 
 protected:
-    DatabaseWithDictionaries(const String & name, const String & metadata_path_, const String & data_path_, const String & logger, const Context & context);
+    DatabaseWithDictionaries(const String & name, const String & metadata_path_, const String & data_path_, const String & logger, ContextPtr context);
 
     ASTPtr getCreateDictionaryQueryImpl(const String & dictionary_name, bool throw_on_error) const override;
 

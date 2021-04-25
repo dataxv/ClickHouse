@@ -78,6 +78,7 @@ def _check_exception(exception, expected_tries=3):
         expected_lines = (
             'Code: 209, ' + EXCEPTION_NETWORK + EXCEPTION_TIMEOUT,
             'Code: 209, ' + EXCEPTION_NETWORK + EXCEPTION_CONNECT,
+            EXCEPTION_TIMEOUT,
         )
 
         assert any(line.startswith(expected) for expected in expected_lines), \
@@ -103,7 +104,7 @@ def started_cluster(request):
     try:
         cluster.start()
 
-        for node_id, node in NODES.items():
+        for node_id, node in list(NODES.items()):
             node.query(CREATE_TABLES_SQL)
             node.query(INSERT_SQL_TEMPLATE.format(node_id=node_id))
 
@@ -155,7 +156,7 @@ def test_reconnect(started_cluster, node_name, first_user, query_base):
 
     with PartitionManager() as pm:
         # Break the connection.
-        pm.partition_instances(*NODES.values())
+        pm.partition_instances(*list(NODES.values()))
 
         # Now it shouldn't:
         _check_timeout_and_exception(node, first_user, query_base, query)

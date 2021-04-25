@@ -4,7 +4,7 @@ FROM yandex/clickhouse-test-base
 RUN apt-get update \
     && env DEBIAN_FRONTEND=noninteractive apt-get -y install \
         tzdata \
-        python \
+        python3 \
         libreadline-dev \
         libicu-dev \
         bsdutils \
@@ -16,7 +16,11 @@ RUN apt-get update \
         odbc-postgresql \
         sqlite3 \
         curl \
-        tar
+        tar \
+        krb5-user \
+        iproute2 \
+        lsof \
+        g++
 RUN rm -rf \
         /var/lib/apt/lists/* \
         /var/cache/debconf \
@@ -28,3 +32,4 @@ RUN curl 'https://cdn.mysql.com//Downloads/Connector-ODBC/8.0/mysql-connector-od
 
 ENV TZ=Europe/Moscow
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+

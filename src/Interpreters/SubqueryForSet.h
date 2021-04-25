@@ -5,7 +5,6 @@
 #include <Parsers/IAST.h>
 #include <Interpreters/IJoin.h>
 #include <Interpreters/PreparedSets.h>
-#include <Processors/Pipe.h>
 
 
 namespace DB
@@ -14,12 +13,18 @@ namespace DB
 class InterpreterSelectWithUnionQuery;
 class ExpressionActions;
 using ExpressionActionsPtr = std::shared_ptr<ExpressionActions>;
+class QueryPlan;
 
 /// Information on what to do when executing a subquery in the [GLOBAL] IN/JOIN section.
 struct SubqueryForSet
 {
+    SubqueryForSet();
+    ~SubqueryForSet();
+    SubqueryForSet(SubqueryForSet &&);
+    SubqueryForSet & operator= (SubqueryForSet &&);
+
     /// The source is obtained using the InterpreterSelectQuery subquery.
-    Pipe source;
+    std::unique_ptr<QueryPlan> source;
 
     /// If set, build it from result.
     SetPtr set;
@@ -35,7 +40,7 @@ struct SubqueryForSet
     void makeSource(std::shared_ptr<InterpreterSelectWithUnionQuery> & interpreter,
                     NamesWithAliases && joined_block_aliases_);
 
-    void setJoinActions(ExpressionActionsPtr actions);
+    void addJoinActions(ExpressionActionsPtr actions);
 
     bool insertJoinedBlock(Block & block);
     void setTotals(Block totals);

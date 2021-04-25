@@ -13,11 +13,24 @@ namespace DB
 {
 
 class Context;
+class QueryPlan;
+
 class QueryPipeline;
+using QueryPipelinePtr = std::unique_ptr<QueryPipeline>;
 
 /// Return false if the data isn't going to be changed by mutations.
 bool isStorageTouchedByMutations(
-    StoragePtr storage, const StorageMetadataPtr & metadata_snapshot, const std::vector<MutationCommand> & commands, Context context_copy);
+    const StoragePtr & storage,
+    const StorageMetadataPtr & metadata_snapshot,
+    const std::vector<MutationCommand> & commands,
+    ContextPtr context_copy
+);
+
+ASTPtr getPartitionAndPredicateExpressionForMutationCommand(
+    const MutationCommand & command,
+    const StoragePtr & storage,
+    ContextPtr context
+);
 
 /// Create an input stream that will read data from storage and apply mutation commands (UPDATEs, DELETEs, MATERIALIZEs)
 /// to this data.
@@ -30,7 +43,7 @@ public:
         StoragePtr storage_,
         const StorageMetadataPtr & metadata_snapshot_,
         MutationCommands commands_,
-        const Context & context_,
+        ContextPtr context_,
         bool can_execute_);
 
     void validate();
@@ -52,15 +65,18 @@ private:
     struct Stage;
 
     ASTPtr prepareInterpreterSelectQuery(std::vector<Stage> &prepared_stages, bool dry_run);
-    void addStreamsForLaterStages(const std::vector<Stage> & prepared_stages, QueryPipeline & pipeline) const;
+    QueryPipelinePtr addStreamsForLaterStages(const std::vector<Stage> & prepared_stages, QueryPlan & plan) const;
 
     std::optional<SortDescription> getStorageSortDescriptionIfPossible(const Block & header) const;
+
+    ASTPtr getPartitionAndPredicateExpressionForMutationCommand(const MutationCommand & command) const;
 
     StoragePtr storage;
     StorageMetadataPtr metadata_snapshot;
     MutationCommands commands;
-    Context context;
+    ContextPtr context;
     bool can_execute;
+    SelectQueryOptions select_limits;
 
     ASTPtr mutation_ast;
 
@@ -85,7 +101,7 @@ private:
 
     struct Stage
     {
-        Stage(const Context & context_) : expressions_chain(context_) {}
+        explicit Stage(ContextPtr context_) : expressions_chain(context_) {}
 
         ASTs filters;
         std::unordered_map<String, ASTPtr> column_to_updated;

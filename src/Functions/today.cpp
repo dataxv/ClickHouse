@@ -20,9 +20,9 @@ public:
 
     String getName() const override { return "today"; }
 
-    void execute(Block & block, const ColumnNumbers &, size_t result, size_t input_rows_count) override
+    ColumnPtr execute(const ColumnsWithTypeAndName &, const DataTypePtr &, size_t input_rows_count) const override
     {
-        block.getByPosition(result).column = DataTypeDate().createColumnConst(input_rows_count, day_value);
+        return DataTypeDate().createColumnConst(input_rows_count, day_value);
     }
 
 private:
@@ -42,12 +42,12 @@ public:
         return argument_types;
     }
 
-    const DataTypePtr & getReturnType() const override
+    const DataTypePtr & getResultType() const override
     {
         return return_type;
     }
 
-    ExecutableFunctionImplPtr prepare(const Block &, const ColumnNumbers &, size_t) const override
+    ExecutableFunctionImplPtr prepare(const ColumnsWithTypeAndName &) const override
     {
         return std::make_unique<ExecutableFunctionToday>(day_value);
     }
@@ -71,13 +71,13 @@ public:
 
     size_t getNumberOfArguments() const override { return 0; }
 
-    static FunctionOverloadResolverImplPtr create(const Context &) { return std::make_unique<TodayOverloadResolver>(); }
+    static FunctionOverloadResolverImplPtr create(ContextPtr) { return std::make_unique<TodayOverloadResolver>(); }
 
     DataTypePtr getReturnType(const DataTypes &) const override { return std::make_shared<DataTypeDate>(); }
 
     FunctionBaseImplPtr build(const ColumnsWithTypeAndName &, const DataTypePtr &) const override
     {
-        return std::make_unique<FunctionBaseToday>(DateLUT::instance().toDayNum(time(nullptr)));
+        return std::make_unique<FunctionBaseToday>(DayNum(DateLUT::instance().toDayNum(time(nullptr)).toUnderType()));
     }
 };
 

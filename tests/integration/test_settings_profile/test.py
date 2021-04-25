@@ -46,7 +46,7 @@ def reset_after_test():
 
 
 def test_smoke():
-    # Set settings and constraints via CREATE SETTINGS PROFILE ... TO user 
+    # Set settings and constraints via CREATE SETTINGS PROFILE ... TO user
     instance.query(
         "CREATE SETTINGS PROFILE xyz SETTINGS max_memory_usage = 100000001 MIN 90000000 MAX 110000000 TO robin")
     assert instance.query(
@@ -59,7 +59,7 @@ def test_smoke():
         "SET max_memory_usage = 120000000", user="robin")
     assert system_settings_profile("xyz") == [["xyz", "local directory", 1, 0, "['robin']", "[]"]]
     assert system_settings_profile_elements(profile_name="xyz") == [
-        ["xyz", "\N", "\N", 0, "max_memory_usage", 100000001, 90000000, 110000000, "\N", "\N"]]
+        ["xyz", "\\N", "\\N", 0, "max_memory_usage", 100000001, 90000000, 110000000, "\\N", "\\N"]]
 
     instance.query("ALTER SETTINGS PROFILE xyz TO NONE")
     assert instance.query(
@@ -81,7 +81,7 @@ def test_smoke():
     assert "Setting max_memory_usage shouldn't be greater than 110000000" in instance.query_and_get_error(
         "SET max_memory_usage = 120000000", user="robin")
     assert system_settings_profile_elements(user_name="robin") == [
-        ["\N", "robin", "\N", 0, "\N", "\N", "\N", "\N", "\N", "xyz"]]
+        ["\\N", "robin", "\\N", 0, "\\N", "\\N", "\\N", "\\N", "\\N", "xyz"]]
 
     instance.query("ALTER USER robin SETTINGS NONE")
     assert instance.query("SHOW CREATE USER robin") == "CREATE USER robin\n"
@@ -108,10 +108,10 @@ def test_settings_from_granted_role():
         "SET max_memory_usage = 120000000", user="robin")
     assert system_settings_profile("xyz") == [["xyz", "local directory", 2, 0, "[]", "[]"]]
     assert system_settings_profile_elements(profile_name="xyz") == [
-        ["xyz", "\N", "\N", 0, "max_memory_usage", 100000001, "\N", 110000000, "\N", "\N"],
-        ["xyz", "\N", "\N", 1, "max_ast_depth", 2000, "\N", "\N", "\N", "\N"]]
+        ["xyz", "\\N", "\\N", 0, "max_memory_usage", 100000001, "\\N", 110000000, "\\N", "\\N"],
+        ["xyz", "\\N", "\\N", 1, "max_ast_depth", 2000, "\\N", "\\N", "\\N", "\\N"]]
     assert system_settings_profile_elements(role_name="worker") == [
-        ["\N", "\N", "worker", 0, "\N", "\N", "\N", "\N", "\N", "xyz"]]
+        ["\\N", "\\N", "worker", 0, "\\N", "\\N", "\\N", "\\N", "\\N", "xyz"]]
 
     instance.query("REVOKE worker FROM robin")
     assert instance.query("SELECT value FROM system.settings WHERE name = 'max_memory_usage'",
@@ -159,10 +159,10 @@ def test_inheritance():
 
     assert system_settings_profile("xyz") == [["xyz", "local directory", 1, 0, "[]", "[]"]]
     assert system_settings_profile_elements(profile_name="xyz") == [
-        ["xyz", "\N", "\N", 0, "max_memory_usage", 100000002, "\N", "\N", 1, "\N"]]
+        ["xyz", "\\N", "\\N", 0, "max_memory_usage", 100000002, "\\N", "\\N", 1, "\\N"]]
     assert system_settings_profile("alpha") == [["alpha", "local directory", 1, 0, "['robin']", "[]"]]
     assert system_settings_profile_elements(profile_name="alpha") == [
-        ["alpha", "\N", "\N", 0, "\N", "\N", "\N", "\N", "\N", "xyz"]]
+        ["alpha", "\\N", "\\N", 0, "\\N", "\\N", "\\N", "\\N", "\\N", "xyz"]]
     assert system_settings_profile_elements(user_name="robin") == []
 
 
@@ -194,26 +194,22 @@ def test_show_profiles():
 
     assert instance.query("SHOW CREATE PROFILE xyz") == "CREATE SETTINGS PROFILE xyz\n"
     assert instance.query(
-        "SHOW CREATE SETTINGS PROFILE default") == "CREATE SETTINGS PROFILE default SETTINGS max_memory_usage = 10000000000, use_uncompressed_cache = 0, load_balancing = \\'random\\'\n"
+        "SHOW CREATE SETTINGS PROFILE default") == "CREATE SETTINGS PROFILE default SETTINGS max_memory_usage = 10000000000, load_balancing = \\'random\\'\n"
     assert instance.query(
-        "SHOW CREATE PROFILES") == "CREATE SETTINGS PROFILE default SETTINGS max_memory_usage = 10000000000, use_uncompressed_cache = 0, load_balancing = \\'random\\'\n" \
+        "SHOW CREATE PROFILES") == "CREATE SETTINGS PROFILE default SETTINGS max_memory_usage = 10000000000, load_balancing = \\'random\\'\n" \
                                    "CREATE SETTINGS PROFILE readonly SETTINGS readonly = 1\n" \
                                    "CREATE SETTINGS PROFILE xyz\n"
 
-    expected_access = "CREATE SETTINGS PROFILE default SETTINGS max_memory_usage = 10000000000, use_uncompressed_cache = 0, load_balancing = \\'random\\'\n" \
+    expected_access = "CREATE SETTINGS PROFILE default SETTINGS max_memory_usage = 10000000000, load_balancing = \\'random\\'\n" \
                       "CREATE SETTINGS PROFILE readonly SETTINGS readonly = 1\n" \
                       "CREATE SETTINGS PROFILE xyz\n"
     assert expected_access in instance.query("SHOW ACCESS")
 
 
 def test_allow_ddl():
-    assert "Not enough privileges" in instance.query_and_get_error("CREATE TABLE tbl(a Int32) ENGINE=Log", user="robin")
-    assert "DDL queries are prohibited" in instance.query_and_get_error("CREATE TABLE tbl(a Int32) ENGINE=Log",
-                                                                        settings={"allow_ddl": 0})
-
-    assert "Not enough privileges" in instance.query_and_get_error("GRANT CREATE ON tbl TO robin", user="robin")
-    assert "DDL queries are prohibited" in instance.query_and_get_error("GRANT CREATE ON tbl TO robin",
-                                                                        settings={"allow_ddl": 0})
+    assert "it's necessary to have grant" in instance.query_and_get_error("CREATE TABLE tbl(a Int32) ENGINE=Log", user="robin")
+    assert "it's necessary to have grant" in instance.query_and_get_error("GRANT CREATE ON tbl TO robin", user="robin")
+    assert "DDL queries are prohibited" in instance.query_and_get_error("CREATE TABLE tbl(a Int32) ENGINE=Log", settings={"allow_ddl": 0})
 
     instance.query("GRANT CREATE ON tbl TO robin")
     instance.query("CREATE TABLE tbl(a Int32) ENGINE=Log", user="robin")
@@ -221,20 +217,16 @@ def test_allow_ddl():
 
 
 def test_allow_introspection():
-    assert "Introspection functions are disabled" in instance.query_and_get_error("SELECT demangle('a')")
-    assert "Not enough privileges" in instance.query_and_get_error("SELECT demangle('a')", user="robin")
-    assert "Not enough privileges" in instance.query_and_get_error("SELECT demangle('a')", user="robin",
-                                                                   settings={"allow_introspection_functions": 1})
-
-    assert "Introspection functions are disabled" in instance.query_and_get_error("GRANT demangle ON *.* TO robin")
-    assert "Not enough privileges" in instance.query_and_get_error("GRANT demangle ON *.* TO robin", user="robin")
-    assert "Not enough privileges" in instance.query_and_get_error("GRANT demangle ON *.* TO robin", user="robin",
-                                                                   settings={"allow_introspection_functions": 1})
-
     assert instance.query("SELECT demangle('a')", settings={"allow_introspection_functions": 1}) == "signed char\n"
-    instance.query("GRANT demangle ON *.* TO robin", settings={"allow_introspection_functions": 1})
 
+    assert "Introspection functions are disabled" in instance.query_and_get_error("SELECT demangle('a')")
+    assert "it's necessary to have grant" in instance.query_and_get_error("SELECT demangle('a')", user="robin")
+    assert "it's necessary to have grant" in instance.query_and_get_error("SELECT demangle('a')", user="robin", settings={"allow_introspection_functions": 1})
+
+    instance.query("GRANT demangle ON *.* TO robin")
     assert "Introspection functions are disabled" in instance.query_and_get_error("SELECT demangle('a')", user="robin")
+    assert instance.query("SELECT demangle('a')", user="robin", settings={"allow_introspection_functions": 1}) == "signed char\n"
+
     instance.query("ALTER USER robin SETTINGS allow_introspection_functions=1")
     assert instance.query("SELECT demangle('a')", user="robin") == "signed char\n"
 
@@ -248,4 +240,4 @@ def test_allow_introspection():
     assert "Introspection functions are disabled" in instance.query_and_get_error("SELECT demangle('a')", user="robin")
 
     instance.query("REVOKE demangle ON *.* FROM robin", settings={"allow_introspection_functions": 1})
-    assert "Not enough privileges" in instance.query_and_get_error("SELECT demangle('a')", user="robin")
+    assert "it's necessary to have grant" in instance.query_and_get_error("SELECT demangle('a')", user="robin")

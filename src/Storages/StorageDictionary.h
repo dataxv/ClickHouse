@@ -7,20 +7,23 @@
 namespace DB
 {
 struct DictionaryStructure;
+class TableFunctionDictionary;
 
 class StorageDictionary final : public ext::shared_ptr_helper<StorageDictionary>, public IStorage
 {
     friend struct ext::shared_ptr_helper<StorageDictionary>;
+    friend class TableFunctionDictionary;
 public:
     std::string getName() const override { return "Dictionary"; }
 
     void checkTableCanBeDropped() const override;
+    void checkTableCanBeDetached() const override;
 
     Pipe read(
         const Names & column_names,
         const StorageMetadataPtr & /*metadata_snapshot*/,
-        const SelectQueryInfo & query_info,
-        const Context & context,
+        SelectQueryInfo & query_info,
+        ContextPtr context,
         QueryProcessingStage::Enum processed_stage,
         size_t max_block_size,
         unsigned threads) override;

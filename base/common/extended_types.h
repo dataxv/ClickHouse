@@ -13,6 +13,9 @@ using wUInt256 = wide::integer<256, unsigned>;
 static_assert(sizeof(wInt256) == 32);
 static_assert(sizeof(wUInt256) == 32);
 
+static constexpr __int128 minInt128() { return static_cast<unsigned __int128>(1) << 127; }
+static constexpr __int128 maxInt128() { return (static_cast<unsigned __int128>(1) << 127) - 1; }
+
 /// The standard library type traits, such as std::is_arithmetic, with one exception
 /// (std::common_type), are "set in stone". Attempting to specialize them causes undefined behavior.
 /// So instead of using the std type_traits, we use our own version which allows extension.
@@ -101,8 +104,3 @@ template <> struct is_big_int<wUInt256> { static constexpr bool value = true; };
 template <typename T>
 inline constexpr bool is_big_int_v = is_big_int<T>::value;
 
-template <typename To, typename From>
-inline To bigint_cast(const From & x [[maybe_unused]])
-{
-    return static_cast<To>(x);
-}
